@@ -77,6 +77,14 @@ router.get('/tasks/:listId', isAuthenticated, async (req: express.Request, res: 
 router.post('/webhook', isAuthenticated, async (req: express.Request, res: express.Response) => {
   try {
     const { workspace_id, endpoint } = req.body;
+    
+    if (!workspace_id) {
+      return res.status(400).json({ error: 'workspace_id is required' });
+    }
+    if (!endpoint) {
+      return res.status(400).json({ error: 'endpoint is required' });
+    }
+
     const response = await axios.post(`https://api.clickup.com/api/v2/team/${workspace_id}/webhook`, {
       endpoint,
       events: ['taskUpdated', 'taskCreated'],
@@ -87,24 +95,46 @@ router.post('/webhook', isAuthenticated, async (req: express.Request, res: expre
       }
     });
     res.json(response.data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating webhook:', error);
-    res.status(500).json({ error: 'Failed to create webhook' });
+    if (error.response) {
+      res.status(error.response.status).json({ 
+        error: error.response.data.err || 'Failed to create webhook' 
+      });
+    } else if (error.request) {
+      res.status(500).json({ error: 'No response received from server' });
+    } else {
+      res.status(500).json({ error: 'Failed to create webhook' });
+    }
   }
 });
 
 // List webhooks
 router.get('/webhooks/:workspace_id', isAuthenticated, async (req: express.Request, res: express.Response) => {
   try {
-    const response = await axios.get(`https://api.clickup.com/api/v2/team/${req.params.workspace_id}/webhook`, {
+    const { workspace_id } = req.params;
+    
+    if (!workspace_id) {
+      return res.status(400).json({ error: 'workspace_id is required' });
+    }
+
+    const response = await axios.get(`https://api.clickup.com/api/v2/team/${workspace_id}/webhook`, {
       headers: {
         'Authorization': `Bearer ${getAccessToken(req)}`
       }
     });
     res.json(response.data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching webhooks:', error);
-    res.status(500).json({ error: 'Failed to fetch webhooks' });
+    if (error.response) {
+      res.status(error.response.status).json({ 
+        error: error.response.data.err || 'Failed to fetch webhooks' 
+      });
+    } else if (error.request) {
+      res.status(500).json({ error: 'No response received from server' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch webhooks' });
+    }
   }
 });
 

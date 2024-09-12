@@ -8,14 +8,20 @@ import { tokenRefresherMiddleware } from './middleware/tokenRefresher';
 import webhookRoutes from './routes/webhook';
 import bodyParser from 'body-parser';
 import './smee-client';  // Add this line in development
+import dotenv from 'dotenv';
+
+dotenv.config();
+console.log('CLICKUP_WEBHOOK_SECRET:', process.env.CLICKUP_WEBHOOK_SECRET);
 
 const app = express();
+
+// This line is crucial for parsing JSON request bodies
+app.use(express.json());
 
 // Use raw body parser for webhook route
 app.use('/webhook/clickup', bodyParser.raw({ type: 'application/json' }));
 
 // Use JSON body parser for other routes
-app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,

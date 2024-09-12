@@ -37,6 +37,7 @@ async function processAutoRollup(taskId: string, accessToken: string) {
       console.log(`Processing Auto Rollup for task ${taskId}`);
       // Implement your Auto Rollup logic here
       // This might involve fetching subtasks, calculating values, and updating the parent task
+      console.log(`Auto Rollup is true for task ${taskId}`);
     }
   } catch (error) {
     console.error('Error processing Auto Rollup:', error);
@@ -61,7 +62,7 @@ router.post('/clickup', async (req, res) => {
     case 'subtaskStatusUpdated':
       // In a real-world scenario, you'd fetch the access token for the workspace
       // For now, we'll use a placeholder
-      const accessToken = 'PLACEHOLDER_ACCESS_TOKEN';
+      const accessToken = '108004935_bb25b619339938968e8457ec42b79c577f777b60a8c0949d4ba6123d627192af';
       await processAutoRollup(task_id, accessToken);
       break;
     // Add more cases for other event types as needed
