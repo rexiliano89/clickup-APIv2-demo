@@ -8,8 +8,16 @@ router.get('/clickup', passport.authenticate('clickup', { scope: ['task:read', '
 router.get('/clickup/callback', 
   passport.authenticate('clickup', { failureRedirect: '/login' }),
   (req: express.Request, res: express.Response) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
+    // Successful authentication
+    if (req.user && 'accessToken' in req.user) {
+      res.send(`
+        Authentication successful!<br>
+        Your access token is: ${req.user.accessToken}<br>
+        <a href="/">Go to Home</a>
+      `);
+    } else {
+      res.redirect('/');
+    }
   }
 );
 
