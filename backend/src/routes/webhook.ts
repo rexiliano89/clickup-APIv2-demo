@@ -57,12 +57,12 @@ router.post('/clickup', async (req, res) => {
     case 'taskCreated':
     case 'taskUpdated':
     case 'taskStatusUpdated':
-    case 'subtaskCreated':
-    case 'subtaskUpdated':
-    case 'subtaskStatusUpdated':
+    case 'taskMoved':
+    
       // In a real-world scenario, you'd fetch the access token for the workspace
       // For now, we'll use a placeholder
       const accessToken = '108004935_bb25b619339938968e8457ec42b79c577f777b60a8c0949d4ba6123d627192af';
+      console.log(`Processing event: ${event} for task ${task_id}`);
       await processAutoRollup(task_id, accessToken);
       break;
     // Add more cases for other event types as needed
