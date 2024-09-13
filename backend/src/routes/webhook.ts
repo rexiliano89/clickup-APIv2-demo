@@ -6,6 +6,18 @@ const router = express.Router();
 
 interface ClickUpTask {
   id: string;
+  parent: string | null;
+  subtasks: {
+    id: string;
+    name: string;
+    value: any;
+    custom_fields: {
+        id: string;
+        name: string;
+        type: string;
+        value: any;
+      }[];
+  }[];
   custom_fields: {
     id: string;
     name: string;
@@ -15,6 +27,17 @@ interface ClickUpTask {
   // Add other relevant fields as needed
 }
 
+// Subtask IDs for different custom fields
+// TODO:Needs to go to DB later
+enum RollupFieldsIds {
+    AutoRollup = '6b7b8eaa-4684-45a1-84fc-fa1ae6aa50c0',
+    TotalRollupValue = '61dea4a8-5803-4ddc-a2bf-94709bbbdf05',
+    SubTaskValue = '6b7b8eaa-4684-45a1-84fc-fa1ae6aa50c0'
+}
+
+//TODO: Remove
+const accessToken = '108004935_bb25b619339938968e8457ec42b79c577f777b60a8c0949d4ba6123d627192af';
+
 function verifyWebhookSignature(req: express.Request, secret: string): boolean {
   const signature = req.headers['x-signature'] as string;
   const body = JSON.stringify(req.body);
@@ -23,25 +46,41 @@ function verifyWebhookSignature(req: express.Request, secret: string): boolean {
   return signature === digest;
 }
 
-async function processAutoRollup(taskId: string, accessToken: string) {
-  try {
-    // Fetch the task details
-    const taskResponse = await axios.get<ClickUpTask>(`https://api.clickup.com/api/v2/task/${taskId}`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    const task = taskResponse.data;
+async function processAutoRollup(body: any) {
+  
+    // Extract relevant information from the webhook payload
+    const { history_items, task_id } = body;
 
-    // Check if Auto Rollup is true
-    const autoRollupField = task.custom_fields.find(field => field.name === 'Auto Rollup');
-    if (autoRollupField && autoRollupField.value) {
-      console.log(`Processing Auto Rollup for task ${taskId}`);
-      // Implement your Auto Rollup logic here
-      // This might involve fetching subtasks, calculating values, and updating the parent task
-      console.log(`Auto Rollup is true for task ${taskId}`);
-    }
-  } catch (error) {
-    console.error('Error processing Auto Rollup:', error);
-  }
+    // Function to process a single history item
+    const processHistoryItem = async (item: any) => {
+        if (item.parent_id == null || item.field !== "custom_field") {
+            return;
+        }
+        console.log(`Processing history item for task ${task_id}, parent ${item.parent_id}`);
+        // Make API request to get parent task
+        let parentTask: ClickUpTask;
+        try {
+            const response = await axios.get(`https://api.clickup.com/api/v2/task/${item.parent_id}`, {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            parentTask = response.data as ClickUpTask;
+
+            if (parentTask.custom_fields.find(field => field.id === RollupFieldsIds.AutoRollup && field.value === true)) {
+                console.log(`Auto Rollup is enabled for parent task ${item.parent_id}`);
+                const currentValue = parentTask.custom_fields.find(field => field.id === RollupFieldsIds.TotalRollupValue)?.value ?? 0;
+                const newValue = currentValue + (item.new_value ?? 0) - (item.old_value ?? 0);
+                console.log(`Current value: ${currentValue}, New value: ${newValue}`);
+            }
+            console.log(`Successfully fetched parent task ${item.parent_id}`);
+        } catch (error) {
+            console.error(`Error fetching parent task ${item.parent_id}:`, error);
+            throw error;
+        }
+    
+    };
+
 }
 
 router.post('/clickup', async (req, res) => {
@@ -62,8 +101,8 @@ router.post('/clickup', async (req, res) => {
       // In a real-world scenario, you'd fetch the access token for the workspace
       // For now, we'll use a placeholder
       const accessToken = '108004935_bb25b619339938968e8457ec42b79c577f777b60a8c0949d4ba6123d627192af';
-      console.log(`Processing event: ${event} for task ${task_id}`);
-      await processAutoRollup(task_id, accessToken);
+      console.log(`Processing event: ${event}`);
+    //   await processAutoRollup(req.body);
       break;
     // Add more cases for other event types as needed
     default:
