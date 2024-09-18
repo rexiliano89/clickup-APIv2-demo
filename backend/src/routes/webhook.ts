@@ -28,14 +28,15 @@ interface ClickUpTask {
 }
 
 // Subtask IDs for different custom fields
-// TODO:Needs to go to DB later
+// These custom fields have been manually created in ClickUp 
 enum RollupFieldsIds {
     AutoRollup = 'a571297b-82bb-4063-844a-72ba69808e33',
     TotalRollupValue = '61dea4a8-5803-4ddc-a2bf-94709bbbdf05',
     SubTaskValue = '6b7b8eaa-4684-45a1-84fc-fa1ae6aa50c0'
 }
 
-//TODO: Fetch Access Token from DB
+// Access token hard coded from login redirect page
+// Needs to be changed to get from DB
 const accessToken = '108004935_bb25b619339938968e8457ec42b79c577f777b60a8c0949d4ba6123d627192af';
 
 function verifyWebhookSignature(req: express.Request, secret: string): boolean {
@@ -46,17 +47,21 @@ function verifyWebhookSignature(req: express.Request, secret: string): boolean {
   return signature === digest;
 }
 
+/***
+ * Sums up the value of all subtasks custom field values
+ * and updates the parent task's TotalRollupValue custom field
+ * if the parent task has the AutoRollup custom field set to true.
+ * 
+ * @param body Webhook request body
+ */
 async function processAutoRollup(body: any) {
-    console.log("processAutoRollup");
-    // Extract relevant information from the webhook payload
     const { history_items, task_id } = body;
 
-    // Function to process a single history item
     for (const item of history_items) {
         if (item.field !== "custom_field") {
             return;
         }
-        // Make API request to get parent task
+        // get parent task
         let itemTask: ClickUpTask;
         let parentTask: ClickUpTask;
         try {
@@ -78,7 +83,10 @@ async function processAutoRollup(body: any) {
             });
             parentTask = parentResponse.data as ClickUpTask;
 
+            // Check if the parent task has the AutoRollup custom field, and apply changes to parent task
             if (parentTask.custom_fields.find(field => field.id === RollupFieldsIds.AutoRollup && (field.value === true || field.value === "true"))) {
+              // Get the current value of the TotalRollupValue custom field
+              // Manual casting from sring to number, since webhook API returns string
               const currentValue = +(parentTask.custom_fields.find(field => field.id === RollupFieldsIds.TotalRollupValue)!.value ?? 0);
               const newValue = currentValue + (Number(item.after) || 0) - (Number(item.before) || 0);
               
@@ -114,7 +122,7 @@ router.post('/clickup', async (req, res) => {
 
   const { event, task_id, webhook_id } = req.body;
 
-  // Handle different event types
+  // Handle different webhook events
   switch (event) {
     case 'taskCreated':
     case 'taskUpdated':
@@ -124,6 +132,7 @@ router.post('/clickup', async (req, res) => {
       await processAutoRollup(req.body);
       break;
     // Add more cases for other event types as needed
+    // see https://clickup.com/api/developer-portal/webhooks/
     default:
       console.log(`Unhandled event type: ${event}`);
   }
