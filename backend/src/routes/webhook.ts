@@ -7,17 +7,7 @@ const router = express.Router();
 interface ClickUpTask {
   id: string;
   parent: string | null;
-  subtasks: {
-    id: string;
-    name: string;
-    value: any;
-    custom_fields: {
-        id: string;
-        name: string;
-        type: string;
-        value: any;
-      }[];
-  }[];
+  subtasks: Subtask[];
   custom_fields: {
     id: string;
     name: string;
@@ -27,12 +17,23 @@ interface ClickUpTask {
   // Add other relevant fields as needed
 }
 
+interface Subtask {
+  id: string;
+  name: string;
+  value: any;
+  custom_fields: {
+    id: string;
+    name: string;
+    type: string;
+    value: any;
+  }[];
+}
+
 // Subtask IDs for different custom fields
 // These custom fields have been manually created in ClickUp 
 enum RollupFieldsIds {
     AutoRollup = 'a571297b-82bb-4063-844a-72ba69808e33',
-    TotalRollupValue = '61dea4a8-5803-4ddc-a2bf-94709bbbdf05',
-    SubTaskValue = '6b7b8eaa-4684-45a1-84fc-fa1ae6aa50c0'
+    RollupValue = '61dea4a8-5803-4ddc-a2bf-94709bbbdf05',
 }
 
 // Access token hard coded from login redirect page
@@ -47,6 +48,19 @@ function verifyWebhookSignature(req: express.Request, secret: string): boolean {
   return signature === digest;
 }
 
+async function getTask(taskId: string, includeSubtasks: boolean): Promise<ClickUpTask> {
+    const taskResponse = await axios.get(`https://api.clickup.com/api/v2/task/${taskId}`, {
+        headers: {
+            'Authorization': `Bearer ${accessToken}`
+        },
+        params: {
+            include_subtasks: includeSubtasks,
+            custom_fields: true
+        }
+    }); 
+    return taskResponse.data as ClickUpTask;
+} 
+
 /***
  * Sums up the value of all subtasks custom field values
  * and updates the parent task's TotalRollupValue custom field
@@ -58,61 +72,106 @@ async function processAutoRollup(body: any) {
     const { history_items, task_id } = body;
 
     for (const item of history_items) {
-        if (item.field !== "custom_field") {
-            return;
-        }
-        // get parent task
-        let itemTask: ClickUpTask;
-        let parentTask: ClickUpTask;
-        try {
-            const taskResponse = await axios.get(`https://api.clickup.com/api/v2/task/${task_id}`, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
-            itemTask = taskResponse.data as ClickUpTask;
-            console.log('HTTP itemTask', itemTask.id);
-            if (itemTask.parent === null) {
-                return;
-            }
-       
-            const parentResponse = await axios.get(`https://api.clickup.com/api/v2/task/${itemTask.parent}`, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
-            parentTask = parentResponse.data as ClickUpTask;
-
-            // Check if the parent task has the AutoRollup custom field, and apply changes to parent task
-            if (parentTask.custom_fields.find(field => field.id === RollupFieldsIds.AutoRollup && (field.value === true || field.value === "true"))) {
-              // Get the current value of the TotalRollupValue custom field
-              // Manual casting from sring to number, since webhook API returns string
-              const currentValue = +(parentTask.custom_fields.find(field => field.id === RollupFieldsIds.TotalRollupValue)!.value ?? 0);
-              const newValue = currentValue + (Number(item.after) || 0) - (Number(item.before) || 0);
-              
-              const updateResponse = await axios.post(
-                  `https://api.clickup.com/api/v2/task/${parentTask.id}/field/${RollupFieldsIds.TotalRollupValue}`,
-                  {
-                      value: newValue
-                  },
-                  {
-                      headers: {
-                          'Authorization': `Bearer ${accessToken}`,
-                          'Content-Type': 'application/json'
-                      }
-                  }
-              );
-              console.log(`Successfully updated TotalRollupValue for parent task ${parentTask.id} to ${newValue}`);
-            }
-            console.log(`Successfully fetched parent task`);
-        } catch (error) {
-            console.error(`Error GET or POST task`, error);
-            throw error;
-        }
-    
+      await processRollupValueUpdate(item, task_id);
+      await processAutoRollUpToggle(item, task_id);
     };
-
 }
+
+async function processAutoRollUpToggle(item: any, taskId: string) {
+  if (item.field !== "custom_field" && item.custom_field.id !== RollupFieldsIds.AutoRollup) {
+    console.log(`Skipping event, since it's not a AutoRollup custom field update`);
+    return;
+  }
+
+  if (item.before === null && item.after === 'true') {
+      await processToggleOn(item, taskId);
+  } else if (item.before === 'true' && item.after === null) {
+    await processToggleOff(item, taskId);
+  } 
+}
+
+async function processToggleOff(item: any, taskId: string) {
+  await axios.post(
+    `https://api.clickup.com/api/v2/task/${taskId}/field/${RollupFieldsIds.RollupValue}`,
+    { value: null },
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+}
+
+async function processToggleOn(item: any, taskId: string) {
+  const task = await getTask(taskId, true);
+  
+  // Calculate total rollup value from subtasks
+  let totalRollupValue = 0;
+  for (const subtask of task.subtasks) {
+    const fullSubTask = await getTask(subtask.id, false);
+    const rollupField = fullSubTask.custom_fields.find(field => field.id === RollupFieldsIds.RollupValue);
+    totalRollupValue += Number(rollupField?.value) || 0;
+  }
+
+  // Update parent task with total rollup value
+  await axios.post(
+    `https://api.clickup.com/api/v2/task/${taskId}/field/${RollupFieldsIds.RollupValue}`,
+    { value: totalRollupValue },
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+console.log(`Updated RollupValue for task ${task.id} to ${totalRollupValue}`);
+}
+
+async function processRollupValueUpdate(item: any, taskId: string) {
+  if (item.field !== "custom_field" && item.custom_field.id !== RollupFieldsIds.RollupValue) {
+    console.log(`Skipping event, since it's not a RollupValue custom field update`);
+      return;
+  }
+  
+  // get parent task
+  let itemTask: ClickUpTask;
+  let parentTask: ClickUpTask;
+  
+  try {
+      itemTask = await getTask(taskId, false);
+      if (itemTask.parent === null) {
+          return;
+      }
+      
+      parentTask = await getTask(itemTask.parent, false);
+      // Check if the parent task has the AutoRollup custom field, and apply changes to parent task
+      if (parentTask.custom_fields.find(field => field.id === RollupFieldsIds.AutoRollup && (field.value === true || field.value === "true"))) {
+        // Get the current value of the TotalRollupValue custom field
+        // Manual casting from sring to number, since webhook API returns string
+        const currentValue = +(parentTask.custom_fields.find(field => field.id === RollupFieldsIds.RollupValue)!.value ?? 0);
+        const newValue = currentValue + (Number(item.after) || 0) - (Number(item.before) || 0);
+        
+        const updateResponse = await axios.post(
+            `https://api.clickup.com/api/v2/task/${parentTask.id}/field/${RollupFieldsIds.RollupValue}`,
+            {
+                value: newValue
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                } 
+            }
+        );
+        console.log(`Successfully updated TotalRollupValue for parent task ${parentTask.id} to ${newValue}`);
+      }
+      console.log(`Successfully fetched parent task`);
+  } catch (error) {
+      console.error(`Error GET or POST task`, error);
+      throw error;
+  }
+} 
 
 router.post('/clickup', async (req, res) => {
   // Verify the webhook signature
