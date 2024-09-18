@@ -11,7 +11,6 @@ import './smee-client';  // Add this line in development
 import dotenv from 'dotenv';
 
 dotenv.config();
-console.log('CLICKUP_WEBHOOK_SECRET:', process.env.CLICKUP_WEBHOOK_SECRET);
 
 const app = express();
 
