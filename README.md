@@ -2,6 +2,10 @@
 
 This repository contains a demo application showcasing a ClickUp to ClickUp integration. It demonstrates basic REST functionality, webhook handling, and OAuth implementation using the ClickUp API v2.
 
+## App
+Simple app that rolls up subtask customer fields into a parent task.
+https://youtu.be/f8q2zotCqIE
+
 ## Features
 
 - OAuth authentication with ClickUp
