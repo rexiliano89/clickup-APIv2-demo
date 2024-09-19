@@ -29,14 +29,15 @@ Key components:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/clickup-APIv2-demo.git
+   git clone git@github.com:time-loop/clickup-APIv2-demo.git
    cd clickup-APIv2-demo
    ```
 
 2. Install dependencies:
    ```
    cd backend && npm install
-   cd ../frontend/frontend && npm install
+   cd ../frontend && npm install
+   cd ../
    ```
 
 3. Set up environment variables:
@@ -49,29 +50,37 @@ Key components:
     CLICKUP_CLIENT_ID=your_client_id
     CLICKUP_CLIENT_SECRET=your_client_secret
     REDIRECT_URI=http://localhost:3000/auth/callback
+    SESSION_SECRET=your_session_secret
+    CLICKUP_WEBHOOK_SECRET=your_webhook_secret
     ```
-
-4. Update the access token:
-   After logging in, replace the `access_token` in `backend/src/routes/webhook.ts` with the token you received.
-
-5. Set up Smee.io for webhook forwarding:
+4. Set up Smee.io for webhook forwarding:
    - Visit [smee.io](https://smee.io/) and create a new channel
-   - Update the webhook URL in your ClickUp app settings with the Smee.io URL
+   - Update `smee-client.ts` with the new channel URL in `new SmeeClient({ source: 'https://smee.io/your_channel_id', ... })`
    - Run the Smee client:
     ```
     npx smee -u https://smee.io/your_channel_id -t http://localhost:3000/webhook
     ```
 
-6. Start the development servers:
+5. Start the backend server:
+   ```
+   cd backend
+   npm run dev
+   ```
+   Open http://localhost:3000/ and login with your ClickUp account via the linked OAuth app.
+
+6. Update the access token:
+   After logging in, copy the `access_token` and replace the `access_token` in `backend/src/routes/webhook.ts` with the token you received.
+
+7. Start the development servers:
    ```
    # In the backend directory
    npm run dev
 
-   # In the frontend/frontend directory
+   # In the frontend directory
    npm run dev
    ```
 
-7. Open your browser and navigate to `http://localhost:3000` to use the application.
+8. Open your browser and navigate to `http://localhost:3000` to use the application.
 
 ## Contributing
 
